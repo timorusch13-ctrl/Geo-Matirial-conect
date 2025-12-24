@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#2D6A4F">
     <title>GeoMaterial Connect</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -42,6 +43,7 @@
             width: 100%; 
             overflow: hidden; 
             font-family: 'Roboto', sans-serif;
+            /* Hintergrundfarbe auf Surface setzen, um weiße Ränder zu vermeiden */
             background-color: var(--surface); 
             color: var(--on-surface);
             position: fixed;
@@ -52,6 +54,8 @@
             flex-direction: column; 
             height: 100%; 
             width: 100%;
+            /* Verhindert Blinken beim Laden */
+            background-color: var(--surface);
         }
         
         header { 
@@ -68,6 +72,7 @@
             flex: 1; 
             position: relative; 
             overflow: hidden; 
+            background-color: var(--surface);
         }
         
         .view { 
@@ -82,7 +87,7 @@
         }
         .view.active { opacity: 1; pointer-events: auto; }
 
-        #map { height: 100%; width: 100%; z-index: 1; }
+        #map { height: 100%; width: 100%; z-index: 1; background: var(--surface-variant); }
 
         nav { 
             background: var(--surface-variant); 
@@ -145,7 +150,7 @@
             width: 100%; border: none; background: var(--surface-variant); 
             padding: 16px; border-radius: 14px; font-size: 16px; font-family: inherit; margin-bottom: 12px;
             -webkit-appearance: none;
-            user-select: text; /* Eingabe erlauben */
+            user-select: text;
         }
         
         .image-picker {
@@ -444,7 +449,14 @@
 
     // Settings
     document.querySelectorAll('.theme-btn').forEach(b => {
-        b.onclick = () => document.body.setAttribute('data-theme', b.dataset.theme);
+        b.onclick = () => {
+            const theme = b.dataset.theme;
+            document.body.setAttribute('data-theme', theme);
+            
+            // Theme color meta tag aktualisieren
+            const colors = { forest: '#2D6A4F', ocean: '#006494', volcano: '#9C4331' };
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', colors[theme]);
+        };
     });
     
     document.getElementById('sat-toggle').onchange = (e) => {
