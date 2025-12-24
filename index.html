@@ -69,7 +69,6 @@
         .m3-field { width: 100%; background: var(--md-sys-color-surface-variant); border: none; padding: 16px; border-radius: 15px; margin-bottom: 12px; font-size: 16px; font-family: inherit; }
         .btn-main { background: var(--md-sys-color-primary); color: white; border: none; width: 100%; padding: 16px; border-radius: 100px; font-weight: 600; }
 
-        /* Switch Design */
         .switch { position: relative; display: inline-block; width: 52px; height: 32px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; inset: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
@@ -84,13 +83,22 @@
             transition: 0.4s; width: 90%; max-width: 400px;
         }
         #status-bar.show { transform: translateX(-50%) translateY(env(safe-area-inset-top)); }
+        
+        /* Optimierter Lösch-Button für Handy */
+        #del-btn { 
+            display: none; 
+            padding: 12px;
+            margin-left: 10px;
+            border-radius: 12px;
+            background: rgba(186, 26, 26, 0.1); /* Zartes Rot im Hintergrund */
+        }
     </style>
 </head>
 <body data-theme="forest">
 
 <div id="status-bar">
     <span class="material-symbols-rounded">touch_app</span>
-    <span style="flex-grow:1; font-size:14px">Material-Ort auf der Karte wählen</span>
+    <span style="flex-grow:1; font-size:14px">Material-Ort auf Karte wählen</span>
     <button onclick="cancelPicking()" style="background:none; border:none; color:white;"><span class="material-symbols-rounded">close</span></button>
 </div>
 
@@ -127,6 +135,7 @@
                 <button onclick="updateTheme('ocean')" style="background:#006494; color:white; border:none; padding:15px; border-radius:15px;">Blau</button>
                 <button onclick="updateTheme('volcano')" style="background:#9C4331; color:white; border:none; padding:15px; border-radius:15px;">Vulkan</button>
             </div>
+            <div style="margin-top:30px; font-size:10px; opacity:0.3; text-align:center;">Geräte-ID: <span id="dev-id-display"></span></div>
         </div>
     </div>
 </div>
@@ -142,7 +151,7 @@
         <h2 style="margin-top:0">Neues Material</h2>
         <input type="text" id="new-name" class="m3-field" placeholder="Name des Materials">
         <textarea id="new-desc" class="m3-field" placeholder="Kurze Info dazu..." rows="3"></textarea>
-        <button class="btn-main" onclick="saveNewMaterial()">Veröffentlichen</button>
+        <button class="btn-main" id="btn-save-mat">Eintragen</button>
         <button onclick="closeAddModal()" style="width:100%; background:none; border:none; padding:15px; color:#666;">Abbrechen</button>
     </div>
 </div>
@@ -150,13 +159,13 @@
 <div class="overlay" id="detail-overlay">
     <div class="modal">
         <div style="display:flex; align-items:center; margin-bottom:10px;">
-            <h2 id="m-name" style="margin:0; flex-grow:1"></h2>
-            
+            <h2 id="m-name" style="margin:0; flex-grow:1; font-size: 24px;"></h2>
+            <button id="del-btn" style="border:none; color:var(--md-sys-color-error);"><span class="material-symbols-rounded" style="font-size: 30px;">delete</span></button>
         </div>
-        <p id="m-desc" style="opacity:0.8; margin-bottom:20px"></p>
+        <p id="m-desc" style="opacity:0.8; margin-bottom:20px; font-size: 16px;"></p>
         <div id="comment-list" style="max-height:150px; overflow-y:auto; background:rgba(0,0,0,0.03); border-radius:15px; padding:15px; margin-bottom:15px;"></div>
         <input type="text" id="reply-text" class="m3-field" placeholder="Kommentar schreiben...">
-        <button class="btn-main" onclick="sendReply()">Absenden</button>
+        <button class="btn-main" id="btn-reply">Absenden</button>
         <button onclick="closeDetailModal()" style="width:100%; background:none; border:none; padding:15px;">Schließen</button>
     </div>
 </div>
@@ -178,6 +187,13 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const pinsCol = collection(db, "pins");
+
+    let myId = localStorage.getItem('geo_device_id');
+    if(!myId) {
+        myId = 'dev_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('geo_device_id', myId);
+    }
+    document.getElementById('dev-id-display').innerText = myId;
 
     let map, activeMaterialId, userMarker, tempCoords;
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
@@ -217,31 +233,48 @@
 
     window.cancelPicking = () => document.getElementById('status-bar').classList.remove('show');
 
-    window.saveNewMaterial = async () => {
+    // MOBILE OPTIMIERTE CLICK HANDLER
+    document.getElementById('btn-save-mat').addEventListener('touchend', async (e) => {
+        e.preventDefault();
         const name = document.getElementById('new-name').value;
         const desc = document.getElementById('new-desc').value;
         if(name && tempCoords) {
-            await addDoc(pinsCol, { name, desc, lat: tempCoords.lat, lng: tempCoords.lng, comments: [], createdAt: serverTimestamp() });
+            await addDoc(pinsCol, { 
+                name, desc, lat: tempCoords.lat, lng: tempCoords.lng, 
+                comments: [], createdAt: serverTimestamp(), ownerId: myId 
+            });
             document.getElementById('new-name').value = '';
             document.getElementById('new-desc').value = '';
             closeAddModal();
         }
-    };
+    });
 
-    window.deleteMaterial = async () => {
-        if(activeMaterialId && confirm("Soll dieses Material wirklich gelöscht werden?")) {
-            await deleteDoc(doc(db, "pins", activeMaterialId));
-            closeDetailModal();
+    document.getElementById('del-btn').addEventListener('touchend', async (e) => {
+        e.preventDefault();
+        if(activeMaterialId) {
+            if(confirm("Soll dieses Material wirklich gelöscht werden?")) {
+                await deleteDoc(doc(db, "pins", activeMaterialId));
+                closeDetailModal();
+            }
         }
-    };
+    });
+
+    document.getElementById('btn-reply').addEventListener('touchend', async (e) => {
+        e.preventDefault();
+        const text = document.getElementById('reply-text').value;
+        if(text && activeMaterialId) {
+            await updateDoc(doc(db, "pins", activeMaterialId), { comments: arrayUnion(text) });
+            document.getElementById('reply-text').value = '';
+        }
+    });
 
     function renderMarkers(mats) {
         map.eachLayer(l => { if(l instanceof L.Marker && l !== userMarker) map.removeLayer(l); });
         mats.forEach(p => {
             const icon = L.divIcon({ 
                 className:'', 
-                html:`<div style="background:var(--md-sys-color-primary); color:white; border:2px solid white; width:32px; height:32px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); display:flex; align-items:center; justify-content:center; box-shadow:0 3px 6px rgba(0,0,0,0.2);"><span class="material-symbols-rounded" style="transform:rotate(45deg); font-size:18px;">inventory_2</span></div>`, 
-                iconSize:[32,32], iconAnchor:[16,32] 
+                html:`<div style="background:var(--md-sys-color-primary); color:white; border:2px solid white; width:36px; height:36px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); display:flex; align-items:center; justify-content:center; box-shadow:0 3px 6px rgba(0,0,0,0.2);"><span class="material-symbols-rounded" style="transform:rotate(45deg); font-size:20px;">inventory_2</span></div>`, 
+                iconSize:[36,36], iconAnchor:[18,36] 
             });
             L.marker([p.lat, p.lng], {icon}).addTo(map).on('click', () => openPin(p));
         });
@@ -251,23 +284,23 @@
         activeMaterialId = p.id;
         document.getElementById('m-name').innerText = p.name;
         document.getElementById('m-desc').innerText = p.desc || '';
-        document.getElementById('comment-list').innerHTML = p.comments.length > 0 ? p.comments.map(c => `<div style="padding:10px 0; border-bottom:1px solid rgba(0,0,0,0.05); font-size:14px;">${c}</div>`).join('') : 'Keine Kommentare.';
-        document.getElementById('detail-overlay').classList.add('show');
-    };
-
-    window.sendReply = async () => {
-        const text = document.getElementById('reply-text').value;
-        if(text && activeMaterialId) {
-            await updateDoc(doc(db, "pins", activeMaterialId), { comments: arrayUnion(text) });
-            document.getElementById('reply-text').value = '';
+        
+        const delBtn = document.getElementById('del-btn');
+        if(p.ownerId === myId) {
+            delBtn.style.display = 'block';
+        } else {
+            delBtn.style.display = 'none';
         }
+
+        document.getElementById('comment-list').innerHTML = p.comments.length > 0 ? p.comments.map(c => `<div style="padding:12px 0; border-bottom:1px solid rgba(0,0,0,0.05); font-size:15px;">${c}</div>`).join('') : 'Keine Kommentare.';
+        document.getElementById('detail-overlay').classList.add('show');
     };
 
     window.recenterMap = () => {
         navigator.geolocation.getCurrentPosition(pos => {
             const coords = [pos.coords.latitude, pos.coords.longitude];
             if(!userMarker) {
-                userMarker = L.marker(coords, { icon: L.divIcon({ html: '<div style="width:16px; height:16px; background:#4285F4; border:2px solid white; border-radius:50%; box-shadow:0 0 10px rgba(0,0,0,0.3);"></div>', className:'' }) }).addTo(map);
+                userMarker = L.marker(coords, { icon: L.divIcon({ html: '<div style="width:18px; height:18px; background:#4285F4; border:3px solid white; border-radius:50%; box-shadow:0 0 10px rgba(0,0,0,0.3);"></div>', className:'' }) }).addTo(map);
             } else {
                 userMarker.setLatLng(coords);
             }
@@ -280,9 +313,9 @@
 
     function renderFeed(mats) {
         document.getElementById('logs-container').innerHTML = mats.map(p => `
-            <div style="background:var(--md-sys-color-surface-variant); padding:18px; border-radius:20px; margin-bottom:12px;" onclick='openPin(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
-                <div style="font-weight:700;">${p.name}</div>
-                <div style="font-size:12px; opacity:0.6; margin-top:4px;">${p.comments.length} Antworten</div>
+            <div style="background:var(--md-sys-color-surface-variant); padding:20px; border-radius:24px; margin-bottom:12px;" onclick='openPin(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
+                <div style="font-weight:700; font-size: 18px;">${p.name}</div>
+                <div style="font-size:13px; opacity:0.6; margin-top:4px;">${p.comments.length} Antworten</div>
             </div>
         `).join('');
     }
